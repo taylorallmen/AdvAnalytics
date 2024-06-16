@@ -1,0 +1,556 @@
+---
+title: "PYSC 6841 HW1"
+author: "Taylor Allmen"
+output: pdf_document
+---
+
+# Include code in knitted document
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Automatically setting the seed across the notebook
+
+```{r, set.seed(2019)}
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+```
+
+# Load Packages
+```{r}
+suppressPackageStartupMessages({
+    library(Hmisc) # Contains many functions useful for data analysis
+    library(checkmate) # Fast and Versatile Argument Checks
+    library(corrr) # Correlations in R
+    library(conflicted) # Makes it easier to handle same named functions that are in different packages
+    library(readxl) # reading in Excel files
+    library(dplyr) # data manipulation
+    library(tidyr) # Tidy Messy Data and pivot_longer and pivot_wider
+    library(ggplot2) # data visualization
+    library(knitr) # knitting data into HTML, Word, or PDF
+    library(evaluate) # Parsing and Evaluation Tools that Provide More Details than the Default
+    library(iopsych) # Methods for Industrial/Organizational Psychology
+    library(psych) # Procedures for Psychological, Psychometric, and Personality Research
+    library(quantreg) # Quantile Regression
+    library(lavaan) # confirmatory factor analysis (CFA) and structural equation modeling (SEM)
+    library(xtable) # Export Tables to LaTeX or HTML
+    library(reshape2) # transforming data between wide and long (tall)
+    library(GPArotation) # GPA Factor Rotation
+    library(Amelia) # A Program for Missing Data
+    library(expss) # Tables, Labels and Some Useful Functions from Spreadsheets and 'SPSS' Statistics
+    library(multilevel) # Multilevel Functions
+    library(janitor) # 	Simple Tools for Examining and Cleaning Dirty Data
+    library(mice) # Multivariate Imputation by Chained Equations
+    library(skimr) # Exploratory Data Analysis
+    library(lmtest) # A collection of tests, data sets, and examples for diagnostic checking in linear regression models
+    library(naniar) # helps with missing data
+    library(tidylog) # Creates a log to tell you what your tidyverse commands are doing to the data. NOTE: MAKE SURE TO ALWAYS LOAD LAST!!!
+})
+
+for (f in getNamespaceExports("tidylog")) {
+    conflicted::conflict_prefer(f, "tidylog", quiet = TRUE)
+}
+```
+
+# Load Data
+```{r}
+library(haven)
+data <- read_sav("SAQ.sav")
+```
+
+#Data 
+```{r}
+nrow(data) #number of rows in data
+ncol(data) #number of columns in data
+```
+
+
+
+# Look for missing data
+```{r}
+library(Amelia)
+
+missmap(data)
+```
+#Remove Unneeded Columns
+```{r}
+data <- data[,1:23]
+```
+
+#Check If Items Need Reverse Scoring
+```{r}
+library(skimr)
+
+skim(data) #look for histograms depicting different distributions 
+```
+
+#Reverse Code
+```{r}
+data <- data %>%
+  mutate(Question_03 = 6-Question_03)
+```
+
+
+# Look for outlier
+```{r}
+cutoff = qchisq(1-.001, ncol(data)) #set cutoff score. this is the 99.9th percentile of the chi-squared distribution with the df being the number of columns in the data set
+mahal = mahalanobis(data,
+                    colMeans(data),
+                    cov(data))
+cutoff #cutoff score
+ncol(data) #df
+summary(mahal < cutoff) #FALSE is how many outliers are there
+```
+#Look at outliers
+```{r}
+data_mahal <- data %>%
+    bind_cols(mahal) %>%
+    rename(mahal = `...24`) #this renames the new column as "mahal"... the "...24" is because there was 23 columns and the new one will be the 24th
+```
+```{r}
+#create dataframe of responses that are above the mahal cutoff score
+mahal_out <- data_mahal %>%
+    filter(mahal > cutoff) %>%
+    arrange(desc(mahal)) #sort mahal values from most to least
+```
+```{r}
+#Exclude outliers from sample
+final <- data %>%
+    filter(mahal < cutoff)
+```
+#Check additivity
+```{r}
+correl = cor(final, use = "pairwise.complete.obs")
+
+symnum(correl) #Looking for 1 off of the diagonal as a sign of too much correlation
+
+```
+#Check Assumptions
+```{r}
+#setting up for assumptions testing
+random <- rchisq(nrow(final), 7) #7 was chosen as chi square value, can be anything larger than 2
+fake <- lm(random~., # Y is predicted by all variables in the data
+          data = final)
+standardized <- rstudent(fake) # Z-score all of the values
+fitted <- scale(fake$fitted.values)
+```
+
+#normality
+```{r}
+hist(standardized, main = "Histogram of Standardized Values", xlab = "Standardized Values")
+```
+# Heteroscedasticity
+```{r}
+library(lmtest)
+
+#Breusch-Pagan Test
+bptest(fake) #P < .05 provides evidence of heteroscedasticity. 
+```
+
+
+#Check Linearity
+```{r}
+qqnorm(standardized, main = "Plot of Standardized Values")
+abline(0,1) #Only look between -2 and 2
+```
+
+
+#Correlation Adequacy
+```{r}
+#Bartlett's test
+cortest.bartlett(correl, n = nrow(final)) #A significant P-value provides support of enough correlation for an EFA
+```
+
+#Sampling Adequacy
+```{r}
+KMO(correl) #Want a high value that is close to 1
+```
+
+#Histograms
+```{r}
+hist(final$Question_01, breaks = 6)
+hist(final$Question_02, breaks = 6)
+hist(final$Question_03, breaks = 6)
+hist(final$Question_04, breaks = 6)
+hist(final$Question_05, breaks = 6)
+hist(final$Question_06, breaks = 6)
+hist(final$Question_07, breaks = 6)
+hist(final$Question_08, breaks = 6)
+hist(final$Question_09, breaks = 6)
+hist(final$Question_10, breaks = 6)
+hist(final$Question_11, breaks = 6)
+hist(final$Question_12, breaks = 6)
+hist(final$Question_13, breaks = 6)
+hist(final$Question_14, breaks = 6)
+hist(final$Question_15, breaks = 6)
+hist(final$Question_16, breaks = 6)
+hist(final$Question_17, breaks = 6)
+hist(final$Question_18, breaks = 6)
+hist(final$Question_19, breaks = 6)
+hist(final$Question_20, breaks = 6)
+hist(final$Question_21, breaks = 6)
+hist(final$Question_22, breaks = 6)
+hist(final$Question_23, breaks = 6)
+```
+
+
+#Set Seed
+```{r}
+set.seed(2001)
+```
+
+#Add ID
+```{r}
+final <- final %>% 
+    mutate(ID = row_number()) #creates ID, adding column at the end
+
+final <- final %>%
+    dplyr::select(ID, everything()) #move ID to be first column
+```
+
+#Create Training and Test Samples
+```{r}
+training <- sample(final$ID, length(final$ID)*0.5) #splits data in half
+set.seed(2001)
+final_training <- subset(final, ID %in% training) #creates training sample
+final_test <- subset(final, !(ID %in% training)) #creates test sample of IDs not in training
+```
+
+#Parallel Analysis
+```{r}
+library(psych)
+fa.parallel(final_training[c(2:24)]) #Start EFA with N-2 factors returned
+```
+
+#EFA 5 Factor
+```{r}
+fa_ml_5_trn <- fa(final_training[c(2:24)], nfactors = 5, fm="ml", rotate="oblimin") #factor analysis with maximum likelihood and oblimin rotation due to correlations. Only selecting columns 2:23 to exclude ID
+
+print(fa_ml_5_trn)
+
+print(fa_ml_5_trn$loadings, cutoff = .3) #only display loadings above .3
+#No cross-loading = simple structure
+```
+#EFA 6 Factor
+```{r}
+fa_ml_6_trn <- fa(final_training[c(2:24)], nfactors = 6, fm="ml", rotate="oblimin") #factor analysis with maximum likelihood and oblimin rotation due to correlations
+
+print(fa_ml_6_trn)
+
+print(fa_ml_6_trn$loadings, cutoff = .3)
+```
+
+#Drop Non-loading Questions for 5 Factor
+```{r}
+final_training_MOD <- final_training %>%
+    dplyr::select(-c(Question_15, Question_23))
+```
+
+#5 Factor Again
+```{r}
+fa_ml_5_trn_MOD <- fa(final_training_MOD[c(2:22)], nfactors = 5, fm="ml", rotate="oblimin") #factor analysis with maximum likelihood and oblimin rotation due to correlations
+
+print(fa_ml_5_trn_MOD)
+
+print(fa_ml_5_trn_MOD$loadings, cutoff = .3)
+```
+#Drop Question 3
+```{r}
+final_training_MOD2 <- final_training %>%
+    dplyr::select(-c(Question_03, Question_15, Question_23))
+```
+
+#5 Factor Again
+```{r}
+fa_ml_5_trn_MOD2 <- fa(final_training_MOD2[c(2:21)], nfactors = 5, fm="ml", rotate="oblimin") #factor analysis with maximum likelihood and oblimin rotation due to correlations
+
+print(fa_ml_5_trn_MOD2)
+
+print(fa_ml_5_trn_MOD2$loadings, cutoff = .3)
+```
+
+#Save to Final Five-Factor EFA to Excel
+```{r}
+#round factor loadings to 3 decimal places
+fa_ml_5_factor_loadings <- as.data.frame(round(unclass(fa_ml_5_trn_MOD2$loadings), 3)) %>% 
+    tibble::rownames_to_column("items") # "items" = column title, can be anything
+
+openxlsx::write.xlsx(fa_ml_5_factor_loadings, "C:/Users/Taylor/OneDrive/PSYC 6841 Advanced Analytics/SAQ_fa_ml_5_factor.xlsx") #after the last / is what you want the file to be titled
+```
+
+#Clean Up Data
+```{r}
+library(dplyr)
+scale_items <- final_training_MOD2 %>%
+    dplyr::select(-c(ID))
+```
+
+
+#Remember Column Order
+```{r}
+colnames(scale_items)
+```
+
+
+#Scales
+```{r}
+#List column number for each factor
+scale_keys_list <- list(frustration = c(1, 3, 4, 11, 14),
+                      computer_incomp = c(5, 6, 9, 12, 13, 16),
+                      bad_experience = c(7, 10, 15),
+                      insecurity = c(2, 8, 17, 20),
+                      nightmares = c(18, 19)
+                      )
+
+scale_keys <- make.keys(scale_items, scale_keys_list, item.labels = colnames(scale_items))
+```
+
+#Score Items
+```{r}
+scores <- scoreItems(scale_keys, scale_items, impute = "none", 
+                         min = 1, max = 5, digits = 3)
+
+head(scores$scores)
+
+scores_df <- as.data.frame(scores$scores)
+```
+#Split Data into Factors
+```{r}
+Frustration <- scale_items %>%
+    dplyr::select(Question_01, Question_04, Question_05, Question_12, Question_16)
+
+Comp_Incomp <- scale_items %>%
+    dplyr::select(Question_06, Question_07, Question_10, Question_13, Question_14, Question_18)
+
+Bad_Experience <- scale_items %>%
+    dplyr::select(Question_08, Question_11, Question_17)
+
+Insecurity <- scale_items %>%
+    dplyr::select(Question_02, Question_09, Question_19, Question_22)
+
+Nightmares <- scale_items %>%
+    dplyr::select(Question_20, Question_21)
+```
+
+#Frustration
+```{r}
+scale_keys_list <- list(frust=c(1, 2, 3, 4, 5))
+
+scale_keys <- make.keys(Frustration, scale_keys_list, item.labels = colnames(Frustration))
+
+Frust_ALPHA <- psych::alpha(x = Frustration[, abs(scale_keys_list$frust)], keys = scale_keys)
+```
+
+```{r}
+Frust_total <- round(as.data.frame(Frust_ALPHA$total), 3)
+Frust_alpha_drop <- round(as.data.frame(Frust_ALPHA$alpha.drop), 3)
+Frust_item_stat <- round(as.data.frame(Frust_ALPHA$item.stats), 3)
+
+Frust_ALPHA #look at standardized alpha for overall reliability and alpha if each item is dropped to make sure each item is contributing to the reliability
+```
+
+
+#Computer Incompetency
+```{r}
+scale_keys_list <- list(comp_incomp=c(1, 2, 3, 4, 5, 6))
+
+scale_keys <- make.keys(Comp_Incomp, scale_keys_list, item.labels = colnames(Comp_Incomp))
+
+Comp_Incomp_ALPHA <- psych::alpha(x = Comp_Incomp[, abs(scale_keys_list$comp_incomp)], keys = scale_keys)
+```
+
+```{r}
+Comp_Incomp_total <- round(as.data.frame(Comp_Incomp_ALPHA$total), 3)
+Comp_Incomp_alpha_drop <- round(as.data.frame(Comp_Incomp_ALPHA$alpha.drop), 3)
+Comp_Incomp_item_stat <- round(as.data.frame(Comp_Incomp_ALPHA$item.stats), 3)
+
+Comp_Incomp_ALPHA
+```
+
+#Unfavorable Math Experiences
+```{r}
+scale_keys_list <- list(bad_exp=c(1, 2, 3))
+
+scale_keys <- make.keys(Bad_Experience, scale_keys_list, item.labels = colnames(Bad_Experiece))
+
+Bad_Exp_ALPHA <- psych::alpha(x = Bad_Experience[, abs(scale_keys_list$bad_exp)], keys = scale_keys)
+```
+
+```{r}
+Bad_Exp_total <- round(as.data.frame(Bad_Exp_ALPHA$total), 3)
+Bad_Exp_alpha_drop <- round(as.data.frame(Bad_Exp_ALPHA$alpha.drop), 3)
+Bad_Exp_item_stat <- round(as.data.frame(Bad_Exp_ALPHA$item.stats), 3)
+
+Bad_Exp_ALPHA
+```
+
+#Statistical Insecurity
+```{r}
+scale_keys_list <- list(insec =c(1, 2, 3, 4))
+
+scale_keys <- make.keys(Insecurity, scale_keys_list, item.labels = colnames(Insecurity))
+
+Insec_ALPHA <- psych::alpha(x = Insecurity[, abs(scale_keys_list$insec)], keys = scale_keys)
+```
+
+```{r}
+Insec_total <- round(as.data.frame(Insec_ALPHA$total), 3)
+Insec_alpha_drop <- round(as.data.frame(Insec_ALPHA$alpha.drop), 3)
+Insec_item_stat <- round(as.data.frame(Insec_ALPHA$item.stats), 3)
+
+Insec_ALPHA
+```
+
+#Statistial Nightmares
+```{r}
+scale_keys_list <- list(nightmares =c(1, 2))
+
+scale_keys <- make.keys(Nightmares, scale_keys_list, item.labels = colnames(Nightmares))
+
+Nightmares_ALPHA <- psych::alpha(x = Nightmares[, abs(scale_keys_list$nightmares)], keys = scale_keys)
+```
+
+```{r}
+Nightmares_total <- round(as.data.frame(Nightmares_ALPHA$total), 3)
+Nightmares_alpha_drop <- round(as.data.frame(Nightmares_ALPHA$alpha.drop), 3)
+Nightmares_item_stat <- round(as.data.frame(Nightmares_ALPHA$item.stats), 3)
+
+Nightmares_ALPHA
+```
+
+#Drop Statistical Insecurity and Statistical Nightmares
+```{r}
+final_training_revisited <- final_training %>%
+    dplyr::select(-c(Question_03, Question_15, Question_23, Question_09, Question_02, Question_22, Question_19, Question_20, Question_21
+))
+```
+
+#3 Factor
+```{r}
+fa_ml_3_trn_revisited <- fa(final_training_revisited[c(2:15)], nfactors = 3, fm="ml", rotate="oblimin") #factor analysis with maximum likelihood and oblimin rotation due to correlations
+
+print(fa_ml_3_trn_revisited)
+
+print(fa_ml_3_trn_revisited$loadings, cutoff = .3)
+```
+
+#Drop Cross-Loading
+```{r}
+final_training_final3 <- final_training %>%
+    dplyr::select(-c(Question_03, Question_15, Question_23, Question_09, Question_02, Question_22, Question_19, Question_20, Question_21, Question_12
+))
+```
+
+#3 Factor
+```{r}
+fa_ml_3_trn_final3 <- fa(final_training_final3[c(2:14)], nfactors = 3, fm="ml", rotate="oblimin") #factor analysis with maximum likelihood and oblimin rotation due to correlations
+
+print(fa_ml_3_trn_final3)
+
+print(fa_ml_3_trn_final3$loadings, cutoff = .3)
+```
+
+#Save to Final Three-Factor EFA to Excel
+```{r}
+#round factor loadings to 3 decimal places
+fa_ml_3_factor_loadings <- as.data.frame(round(unclass(fa_ml_5_trn_final3$loadings), 3)) %>% 
+    tibble::rownames_to_column("items") # "items" = column title, can be anything
+
+openxlsx::write.xlsx(fa_ml_3_factor_loadings, "C:/Users/Taylor/OneDrive/PSYC 6841 Advanced Analytics/SAQ_fa_ml_3_factor.xlsx") #after the last / is what you want the file to be titled
+```
+
+#Clean Up Data
+```{r}
+library(dplyr)
+scale_items <- final_training_final3 %>%
+    dplyr::select(-c(ID))
+```
+
+
+#Remember Column Order
+```{r}
+colnames(scale_items)
+```
+
+#Recreate Scales
+```{r}
+#List column number for each factor
+scale_keys_list <- list(frustration = c(1, 2, 3, 11),
+                      computer_incomp = c(4, 5, 7, 9, 10, 13),
+                      bad_experience = c(6, 8, 12)
+                      )
+
+scale_keys <- make.keys(scale_items, scale_keys_list, item.labels = colnames(scale_items))
+```
+
+#Score Items
+```{r}
+scores <- scoreItems(scale_keys, scale_items, impute = "none", 
+                         min = 1, max = 5, digits = 3)
+
+head(scores$scores)
+
+scores_df <- as.data.frame(scores$scores)
+```
+
+#Split Data into Factors
+```{r}
+Frustration <- scale_items %>%
+    dplyr::select(Question_01, Question_04, Question_05, Question_16)
+
+Comp_Incomp <- scale_items %>%
+    dplyr::select(Question_06, Question_07, Question_10, Question_13, Question_14, Question_18)
+
+Bad_Experience <- scale_items %>%
+    dplyr::select(Question_08, Question_11, Question_17)
+```
+
+#Frustration
+```{r}
+scale_keys_list <- list(frust=c(1, 2, 3, 4))
+
+scale_keys <- make.keys(Frustration, scale_keys_list, item.labels = colnames(Frustration))
+
+Frust_ALPHA <- psych::alpha(x = Frustration[, abs(scale_keys_list$frust)], keys = scale_keys) 
+```
+
+```{r}
+Frust_total <- round(as.data.frame(Frust_ALPHA$total), 3)
+Frust_alpha_drop <- round(as.data.frame(Frust_ALPHA$alpha.drop), 3)
+Frust_item_stat <- round(as.data.frame(Frust_ALPHA$item.stats), 3)
+
+Frust_ALPHA #look at standardized alpha for overall reliability and alpha if each item is dropped to make sure each item is contributing to the reliability
+```
+
+#Computer Incompetency
+```{r}
+scale_keys_list <- list(comp_incomp=c(1, 2, 3, 4, 5, 6))
+
+scale_keys <- make.keys(Comp_Incomp, scale_keys_list, item.labels = colnames(Comp_Incomp))
+
+Comp_Incomp_ALPHA <- psych::alpha(x = Comp_Incomp[, abs(scale_keys_list$comp_incomp)], keys = scale_keys)
+```
+
+```{r}
+Comp_Incomp_total <- round(as.data.frame(Comp_Incomp_ALPHA$total), 3)
+Comp_Incomp_alpha_drop <- round(as.data.frame(Comp_Incomp_ALPHA$alpha.drop), 3)
+Comp_Incomp_item_stat <- round(as.data.frame(Comp_Incomp_ALPHA$item.stats), 3)
+
+Comp_Incomp_ALPHA
+```
+
+#Unfavorable Math Experiences
+```{r}
+scale_keys_list <- list(bad_exp=c(1, 2, 3))
+
+scale_keys <- make.keys(Bad_Experience, scale_keys_list, item.labels = colnames(Bad_Experiece))
+
+Bad_Exp_ALPHA <- psych::alpha(x = Bad_Experience[, abs(scale_keys_list$bad_exp)], keys = scale_keys)
+```
+
+```{r}
+Bad_Exp_total <- round(as.data.frame(Bad_Exp_ALPHA$total), 3)
+Bad_Exp_alpha_drop <- round(as.data.frame(Bad_Exp_ALPHA$alpha.drop), 3)
+Bad_Exp_item_stat <- round(as.data.frame(Bad_Exp_ALPHA$item.stats), 3)
+
+Bad_Exp_ALPHA
+```
