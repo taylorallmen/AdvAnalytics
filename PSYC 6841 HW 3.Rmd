@@ -1,0 +1,600 @@
+---
+title: "PYSC 6841 HW3"
+author: "Taylor Allmen"
+output: pdf_document
+---
+
+# Include code in knitted document
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE, include= FALSE, warning = FALSE, message = FALSE}
+#' <!-- ####################################################################################################### -->
+#' <!-- ####################################################################################################### -->
+#' <!-- ##################################LOADING PACKAGES##################################################### -->
+
+tryCatch(require(pacman),finally=utils:::install.packages(pkgs='pacman',repos='http://cran.r-project.org'));
+require(pacman)
+
+#' <!-- ##if the above doesn't work, use this code## -->
+#' <!-- ##tryCatch -->
+#' <!-- #detach("package:pacman", unload = TRUE) -->
+#' <!-- #install.packages("pacman", dependencies = TRUE) -->
+#' <!-- # ## install.packages("pacman") -->
+
+pacman::p_load(digest,
+               readxl,
+               readr,
+               dplyr,
+               tidyr,
+               ggplot2,
+               knitr,
+               MASS,
+               RCurl,
+               DT,
+               modelr,
+               broom,
+               purrr,
+               pROC,
+               data.table,
+               VIM,
+               gridExtra,
+               Metrics,
+               randomForest,
+               e1071,
+               corrplot,
+               DMwR2,
+               rsample,
+               skimr,
+               psych,
+               conflicted,
+               tree,
+               tidymodels,
+               janitor,
+               GGally,
+               tidyquant,
+               doParallel,
+               Boruta,
+               correlationfunnel,
+               naniar,
+               plotly,
+               themis,
+               questionr,
+               tidylog
+)
+
+# Loading from GitHub
+pacman::p_load_current_gh("agstn/dataxray")
+```
+
+# Load Packages
+```{r}
+library(tidymodels)
+library(ISLR)
+
+suppressPackageStartupMessages({
+    library(conflicted) # An Alternative Conflict Resolution Strategy
+    library(readxl) # read in Excel files
+    library(readr) # read in csv files
+    library(MASS) # Functions and datasets to support Venables and Ripley, "Modern Applied Statistics with S" (4th edition, 2002).
+    library(dplyr) # A Grammar of Data Manipulation
+    library(tidyr) # Tidy Messy Data
+    library(broom) # Convert Statistical Objects into Tidy Tibbles
+    library(ggplot2) # grammar of graphics for visualization
+    library(knitr) # A General-Purpose Package for Dynamic Report Generation in R
+    library(RCurl) # General Network (HTTP/FTP/...) Client Interface for R
+    library(DT) # A Wrapper of the JavaScript Library 'DataTables'
+    library(modelr) # Modelling Functions that Work with the Pipe
+    library(purrr) # Functional Programming Tools - helps with mapping (i.e., loops)
+    library(pROC) #	Display and Analyze ROC Curves
+    library(data.table) # Fast aggregation of large data (e.g. 100GB in RAM)
+    library(VIM) # Visualization and Imputation of Missing Values
+    library(gridExtra) # Miscellaneous Functions for "Grid" Graphics
+    library(Metrics) # Evaluation Metrics for Machine Learning
+    library(randomForest) # Breiman and Cutler's Random Forests for Classification and Regression
+    library(e1071) # Misc Functions of the Department of Statistics, Probability Theory Group (Formerly: E1071), TU Wien
+    library(corrplot) # Visualization of a Correlation Matrix
+    library(DMwR2) # Functions and Data for the Second Edition of "Data Mining with R"
+    library(rsample) # General Resampling Infrastructure
+    library(skimr) # Compact and Flexible Summaries of Data
+    library(psych) # Procedures for Psychological, Psychometric, and Personality Research
+    library(tree) # Classification and Regression Trees
+    library(tidymodels) # Easily Install and Load the 'Tidymodels' Packages
+    library(janitor) # Simple Tools for Examining and Cleaning Dirty Data
+    library(GGally) # Extension to 'ggplot2'
+    library(tidyquant) # Tidy Quantitative Financial Analysis
+    library(doParallel) # Foreach Parallel Adaptor for the 'parallel' Package
+    library(Boruta) # Wrapper Algorithm for All Relevant Feature Selection
+    library(correlationfunnel) # Speed Up Exploratory Data Analysis (EDA) with the Correlation Funnel
+    library(naniar) # viewing and handling missing data
+    library(plotly) # Create interactive plots
+    library(themis) # Upsampling and Downsampling methods for tidymodels
+    library(questionr) # this will give you odds ratios
+    library(tidylog, warn.conflicts = FALSE)
+})
+
+for (f in getNamespaceExports("tidylog")) {
+    conflicted::conflict_prefer(f, "tidylog", quiet = TRUE)
+}
+
+
+conflict_prefer("tune", "tune")
+```
+
+# Set conflict prefer
+```{r}
+conflict_prefer("select", "dplyr")
+conflict_prefer("tune", "tune")
+conflict_prefer("chisq.test", "stats")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("skewness", "PerformanceAnalytics")
+conflict_prefer("fit", "parsnip")
+conflict_prefer("rmse", "yardstick")
+conflict_prefer("map", "purrr")
+conflict_prefer("vip", "vip")
+```
+
+# Load Data
+```{r}
+library(readxl)
+Data <- read_excel("C:/Users/Taylor/OneDrive/PSYC 6841 Advanced Analytics/WA_Fn-UseC_-HR-Employee-Attrition.xlsx")
+colnames(Data) #Get column names)
+```
+
+# Make Attrition a factor
+```{r}
+Data$Attrition <- as.factor(Data$Attrition) # change outcome variable (attrition) to be a factor instead of character
+```
+
+# Look for missing data
+```{r}
+library(Amelia)
+
+missmap(Data)
+```
+No data is missing.
+
+# Look for duplicates in data
+```{r}
+sum(is.na(duplicated(Data)))
+```
+There is no duplicated rows of data.
+
+# Take a glimpse at the data
+```{r}
+glimpse(Data)
+```
+
+# Summarize the data
+```{r}
+skim(Data)
+```
+
+# View the variables that are character strings
+```{r}
+Data %>%
+  select_if(is.character) %>%
+  glimpse()
+```
+
+# View proportion of distribution for character variables
+```{r}
+Data %>%
+    select_if(is.character) %>%
+    map(~ round(table(.) %>% prop.table(), 2)) # rounding to 2 decimal places
+```
+
+# View the number of unique occurances for each numerical variable
+```{r}
+Data %>%
+    select_if(is.numeric) %>%
+    map(~ unique(.) %>% length())
+```
+
+# Move Employee ID to be first column
+```{r}
+Data <- Data %>%
+  select(EmployeeNumber, everything())
+```
+
+# View summary of data
+```{r}
+summary(Data)
+```
+
+# Describe data
+```{r}
+library(conflicted)
+conflict_prefer("describe", "psych")
+describe(Data)
+```
+# Set up validation split
+```{r}
+set.seed(2001)
+attrition_split <- initial_split(Data, strata = "Attrition") #split the data
+train_data <- training(attrition_split) #create the training data set
+test_data <- testing(attrition_split) #create the testing data set
+attrition_fold <- vfold_cv(train_data, v = 10) #create K-fold cross-validation data set on the training data set with 10 folds
+```
+
+### Boruta Conclusion
+```{r}
+set.seed(2001)
+
+library(Boruta)
+
+boruta_df <- train_data %>%
+    select(-EmployeeNumber) %>%
+    mutate_if(is.character, as.factor)
+
+boruta_train <- Boruta(Attrition~., data = boruta_df, doTrace = 2) # doTrace: It refers to verbosity level. 0 means no tracing. 1 means reporting attribute decision as soon as it is cleared. 2 means all of 1 plus additionally reporting each iteration. Default is 0.
+
+print(boruta_train)
+
+
+# Boruta performed 99 iterations in 49.19266 secs.
+#  14 attributes confirmed important: Age, EnvironmentSatisfaction, JobInvolvement, JobLevel, JobRole and 9 more;
+#  16 attributes confirmed unimportant: BusinessTravel, DailyRate, Education, EducationField, EmployeeCount and 11
+# more;
+#  3 tentative attributes left: Department, DistanceFromHome, JobSatisfaction
+
+```
+
+```{r}
+final_boruta <- TentativeRoughFix(boruta_train)
+
+print(final_boruta)
+
+# Boruta performed 99 iterations in 49.19266 secs.
+# Tentatives roughfixed over the last 99 iterations.
+#  16 attributes confirmed important: Age, Department, EnvironmentSatisfaction, JobInvolvement, JobLevel and 11 more;
+#  17 attributes confirmed unimportant: BusinessTravel, DailyRate, DistanceFromHome, Education, EducationField and 12
+# more;
+```
+Save these for later. Compare model with these predictors to the model will all available predictors.
+
+
+# Complete Transformations
+```{r}
+# look at the skew of variables
+train_data %>%
+    select_if(is.numeric) %>%
+    map_df(skewness) %>%
+    gather(factor_key = TRUE) %>%
+    arrange(desc(value)) # arrange in descending values
+```
+Will run again filtering for skewness greater than 0.8. This was selected as `PercentSalaryHike` has a skewness value of 0.832 and the next highest value is `TrainingTimesLastYear` at 0.530.Thus, the skewness cut off was set at the drop off.
+
+
+```{r}
+train_data %>%
+    select_if(is.numeric) %>%
+    map_df(skewness) %>%
+    gather(factor_key = TRUE) %>%
+    arrange(desc(value)) %>%
+    filter(value >= 0.8) %>% #decided on this number by dropoff to next lowest value and visual inspection of graph
+    pull(key) %>%
+    as.character()
+```
+
+```{r}
+skewed_feature_names <- train_data %>%
+    select_if(is.numeric) %>%
+    map_df(skewness) %>%
+    gather(factor_key = TRUE) %>%
+    arrange(desc(value)) %>%
+    filter(value >= 0.8) %>% #decided on this number by dropoff to next lowest value and visual inspection of graph
+    pull(key) %>%
+    as.character()
+```
+
+```{r}
+train_data %>%
+    select(skewed_feature_names) %>%
+    hist()
+```
+`JobLevel` and `StockOptionLevel` may be factors based on their distribution.
+
+# Remove the two factor variables
+```{r}
+!skewed_feature_names %in% c("JobLevel", "StockOptionLevel")
+
+skewed_feature_names <- train_data %>%
+    select_if(is.numeric) %>%
+    map_df(skewness) %>%
+    gather(factor_key = TRUE) %>%
+    arrange(desc(value)) %>%
+    filter(value >= 0.8) %>% # decided on this number by dropoff 
+    filter(!key %in% c("JobLevel", "StockOptionLevel")) %>%
+    pull(key) %>%
+    as.character()
+```
+
+Check to see the JobLevel and StockOptionLevel have been removed.
+```{r}
+skewed_feature_names
+```
+
+# Create recipe
+```{r}
+set.seed(2001)
+
+# Define the desired levels for each factor
+job_levels <- c("0", "1", "2", "3", "4", "5")
+stock_option_levels <- c("0", "1", "2", "3")
+
+recipe_obj <- recipe(Attrition ~ ., data = train_data) %>% 
+  step_rm(EmployeeNumber) %>% # Remove EmployeeNumber since ID isn't behaving
+  step_mutate(JobLevel = factor(JobLevel)) %>% #step_num2factor doesn't like having more than one variable, especially with a different number of factors. Changing to factor.
+    step_mutate(StockOptionLevel = factor(StockOptionLevel)) %>% #Same as above
+    step_YeoJohnson(skewed_feature_names) %>% # Transform data to approximate normality. Correct skewness
+    step_nzv(all_numeric()) %>% # Remove zero and near-zero variance features
+    step_zv(all_predictors()) %>% # Probably redundant with step_nzv
+    step_mutate(JobLevel = factor(JobLevel, levels = job_levels)) %>% # Convert JObLevel to defined levels
+    step_mutate(StockOptionLevel = factor(StockOptionLevel, levels = stock_option_levels)) %>% # Convert StockOptionLevel to defined levels
+    step_normalize(all_numeric()) %>% 
+    step_upsample(all_outcomes(), skip = TRUE) %>% # Balance distribution of outcomes. Use skip = TRUE to upsample on training data, but not on test data.
+    step_novel(all_nominal(), -all_outcomes()) %>% #creates a specification of a recipe step that will assign a previously unseen factor level to a new value.
+    step_dummy(all_nominal(), -all_outcomes()) # Dummy code categorical variables. Only seems to work if you remove the outcome variable.
+
+recipe_obj
+```
+# Create prepped recipe
+```{r}
+set.seed(2001)
+
+recipe_obj_prep <- recipe(Attrition ~ ., data = train_data) %>% 
+  step_rm(EmployeeNumber) %>% # Remove EmployeeNumber since ID isn't behaving
+  step_mutate(JobLevel = factor(JobLevel)) %>% #step_num2factor doesn't like having more than one variable, especially with a different number of factors. Changing to factor.
+    step_mutate(StockOptionLevel = factor(StockOptionLevel)) %>% #Same as above
+    step_YeoJohnson(skewed_feature_names) %>% # Transform data to approximate normality. Correct skewness
+    step_nzv(all_numeric()) %>% # Remove zero and near-zero variance features
+    step_zv(all_predictors()) %>% # Probably redundant with step_nzv
+    step_mutate(JobLevel = factor(JobLevel, levels = job_levels)) %>% # Convert JObLevel to defined levels
+    step_mutate(StockOptionLevel = factor(StockOptionLevel, levels = stock_option_levels)) %>% # Convert StockOptionLevel to defined levels
+    step_normalize(all_numeric()) %>% 
+    step_upsample(all_outcomes(), skip = TRUE) %>% # Balance distribution of outcomes. Use skip = TRUE to upsample on training data, but not on test data.
+    step_novel(all_nominal(), -all_outcomes()) %>% #creates a specification of a recipe step that will assign a previously unseen factor level to a new value.
+    step_dummy(all_nominal(), -all_outcomes()) %>% # Dummy code categorical variables. Only seems to work if you remove the outcome variable.
+  prep()
+
+recipe_obj_prep
+```
+
+# Specify the model
+```{r}
+ridge_spec <- 
+  logistic_reg(penalty = tune(), mixture = 0) %>% #`mixture = 0` to specify a ridge model
+  set_mode("classification") %>% #set mode
+  set_engine("glmnet") #set engine
+```
+
+# Create a workflow
+```{r}
+ridge_workflow <- workflow() %>% #create workflow
+  add_recipe(recipe_obj) %>% #add recipe
+  add_model(ridge_spec) #add model
+```
+
+# Create grid of evenly spaced parameter values
+```{r}
+set.seed(2001)
+penalty_grid <- grid_regular(penalty(range = c(-5, 5)), levels = 50) #Specify the desired penalty values to try. This range is log-scaled. 
+#50 is often overkill but doesn't add much to the computation speed much
+penalty_grid
+```
+
+# Fit all the models
+```{r}
+set.seed(2001)
+tune_res <- tune_grid(
+  ridge_workflow, #specify workflow
+  resamples = attrition_fold, #K-fold cross-validation data set on the training data set with 10 folds
+  grid = penalty_grid
+)
+tune_res
+```
+
+# Create visualization of output
+```{r}
+autoplot(tune_res)
+```
+
+# Create table of model performance
+```{r}
+collect_metrics(tune_res)
+```
+
+# Select best penalty using ROC_AUC
+```{r}
+best_penalty_roc <- select_best(tune_res, metric = "roc_auc") #roc_auc is used to account for the imbalanced dataset
+best_penalty_roc
+```
+Model20 was selected as the best penalty ysing the roc_auc values.roc_auc was selected to account for an imbalance in outcome of the dataset.
+
+# Finalize recipe by adding best penalty
+```{r}
+ridge_final <- finalize_workflow(ridge_workflow, best_penalty_roc)
+ridge_final_fit <- fit(ridge_final, data = train_data)
+```
+
+# Validate with test data
+```{r}
+aug_data <- augment(ridge_final_fit, new_data = test_data)
+
+aug_data %>%
+  roc_auc(truth = Attrition, .pred_Yes)
+```
+
+# Create confusion matrix
+```{r}
+roc_conf <- aug_data %>%
+  conf_mat(truth = Attrition, estimate = .pred_class)
+
+roc_conf
+```
+
+# Now repeat the steps using only the variables identified by Boruta
+## Get important
+```{r}
+important_vars <- getSelectedAttributes(final_boruta, withTentative = FALSE)
+cat(important_vars, sep = ", ")
+```
+Use this list to select the variables deemed important by Boruta from Data and create a new df.
+
+#Create new df
+```{r}
+Data_Boruta <- Data %>%
+    select(EmployeeNumber,
+           Attrition,
+           Age, 
+           Department, 
+           EnvironmentSatisfaction, 
+           JobInvolvement, 
+           JobLevel, 
+           JobRole, 
+           JobSatisfaction, 
+           MaritalStatus, 
+           MonthlyIncome, 
+           NumCompaniesWorked, 
+           OverTime, 
+           StockOptionLevel, 
+           TotalWorkingYears, 
+           YearsAtCompany, 
+           YearsInCurrentRole, 
+           YearsWithCurrManager)
+```
+
+# Split the data again after removing features deemed unnecessary by Boruta
+```{r}
+set.seed(2001)
+data_split_b <- initial_split(Data_Boruta, prop = 0.75, strata = "Attrition")
+
+train_data_b <- training(data_split_b)
+
+test_data_b <- testing(data_split_b)
+
+tabyl(train_data_b$Attrition)
+
+tabyl(test_data_b$Attrition)
+```
+
+
+# Rerun the Cross Validation V-Folds creation
+```{r}
+set.seed(2001)
+cv_folds <- vfold_cv(train_data_b, v = 10, strata = "Attrition") # Note to remember later
+```
+
+# Create new recipe
+```{r}
+recipe_obj_b <- recipe(Attrition ~ ., data = train_data_b) %>% 
+  step_rm(EmployeeNumber) %>% # Remove EmployeeNumber since ID isn't behaving
+  step_mutate(JobLevel = factor(JobLevel)) %>% #step_num2factor doesn't like having more than one variable, especially with a different number of factors. Changing to factor.
+    step_mutate(StockOptionLevel = factor(StockOptionLevel)) %>% #Same as above
+    step_YeoJohnson(all_numeric()) %>% # Transform data to approximate normality. Correct skewness
+    step_nzv(all_numeric()) %>% # Remove zero and near-zero variance features
+    step_zv(all_predictors()) %>% # Probably redundant with step_nzv
+    step_mutate(JobLevel = factor(JobLevel, levels = job_levels)) %>% # Convert JObLevel to defined levels
+    step_mutate(StockOptionLevel = factor(StockOptionLevel, levels = stock_option_levels)) %>% # Convert StockOptionLevel to defined levels
+    step_normalize(all_numeric()) %>% 
+    step_upsample(all_outcomes(), skip = TRUE) %>% # Balance distribution of outcomes. Use skip = TRUE to upsample on training data, but not on test data.
+    step_novel(all_nominal(), -all_outcomes()) %>% #creates a specification of a recipe step that will assign a previously unseen factor level to a new value.
+    step_dummy(all_nominal(), -all_outcomes()) # Dummy code categorical variables. Only seems to work if you remove the outcome variable.
+
+recipe_obj_b
+```
+# Create a workflow
+```{r}
+ridge_workflow_b <- workflow() %>% #create workflow
+  add_recipe(recipe_obj_b) %>% #add recipe
+  add_model(ridge_spec) #add model
+```
+
+# Fit all the models
+```{r}
+set.seed(2001)
+tune_res_b <- tune_grid(
+  ridge_workflow_b,
+  resamples = cv_folds, 
+  grid = penalty_grid
+)
+tune_res_b
+```
+
+# Create visualization of output
+```{r}
+autoplot(tune_res_b)
+```
+
+# Create table of model performance
+```{r}
+collect_metrics(tune_res_b)
+```
+# Select best penalty using ROC_AUC
+```{r}
+best_penalty_roc_b <- select_best(tune_res_b, metric = "roc_auc") #roc_auc is used to account for the imbalanced dataset
+best_penalty_roc_b
+```
+Model19 was selected as the best penalty utilizing the roc_auc values. This is a lower penalty than the model containing all predictor variables, which has a penalty of .075
+
+# Finalize recipe by adding best penalty
+```{r}
+ridge_final_b <- finalize_workflow(ridge_workflow_b, best_penalty_roc_b)
+ridge_final_fit_b <- fit(ridge_final_b, data = train_data_b)
+```
+
+# Validate with test data
+```{r}
+aug_data_b <- augment(ridge_final_fit_b, new_data = test_data_b)
+
+aug_data_b %>%
+  roc_auc(truth = Attrition, .pred_Yes)
+```
+# Create confusion matrix
+```{r}
+roc_conf_b <- aug_data_b %>%
+  conf_mat(truth = Attrition, estimate = .pred_class)
+
+roc_conf_b
+```
+
+# Compare
+```{r}
+roc_conf # confusion matrix of regression with all predictors
+
+roc_conf_b # confusion matrix of regression with only Boruta deem good predictors
+```
+The boruta model produced a larger number of false positives than the regression model with all predictors. 
+
+# Evaluate the final model on the test set
+## For model with all predictors
+```{r}
+ridge_last_fit <- ridge_final %>%
+  last_fit(attrition_split) # fit on the training set and evaluate on the test set
+```
+
+```{r}
+ridge_test_performance <- ridge_last_fit %>% 
+  collect_metrics()
+
+ridge_test_performance
+```
+The model has an accuracy of 79% and an AUC of 87%.
+
+## For model with Boruta predictors only
+```{r}
+ridge_last_fit_b <- ridge_final_b %>%
+  last_fit(data_split_b) # fit on the training set and evaluate on the test set
+```
+
+```{r}
+ridge_test_performance_b <- ridge_last_fit_b %>% 
+  collect_metrics()
+
+ridge_test_performance_b
+```
+The model has an accuracy of 75% and an AUC of 86%.
+
+The model with all available predictors is the optimal Ridge logistic regression model to predict attrition from the data. This was concluded as the model with all available predictors outperformed the model utilizing only the variables deemed important by Boruta. The model with all predictors yielded fewer false positives as well as had an increased accuracy and roc_auc. 
