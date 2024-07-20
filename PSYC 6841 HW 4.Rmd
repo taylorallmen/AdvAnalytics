@@ -1,0 +1,612 @@
+---
+title: "HW 4_Taylor Allmen"
+author: "Taylor Allmen"
+date: "2024-07-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Clear workspace 
+rm(list = ls())
+
+#load pacman
+tryCatch(require(pacman),finally=utils:::install.packages(pkgs='pacman',repos='http://cran.r-project.org'));
+require(pacman)
+
+#load libraries
+library(openxlsx)
+library(tidyverse)
+library(devtools)
+library(conflicted)
+library(lubridate)
+library(sentimentr)
+
+#conflicts
+conflict_prefer("filter", "dplyr")
+```
+#load data
+```{r}
+library(readr)
+Data <- read_csv("C:/Users/Taylor/OneDrive/PSYC 6841 Advanced Analytics/glassdoortest1.csv")
+```
+#Get column names
+```{r}
+colnames(Data)
+```
+
+#Rename ID
+```{r}
+Data <- Data %>%
+    rename(ID = "...1") #rename ...1 to ID
+```
+
+
+#Separate Pros and Cons
+```{r}
+Pros_df <- Data %>%
+    select(c(ID, pros)) %>%
+    filter(!is.na(pros)) %>%
+    rename('comments' = 'pros')
+
+Cons_df <- Data %>%
+    select(c(ID, cons)) %>%
+    filter(!is.na(cons)) %>%
+    rename('comments' = 'cons')
+```
+
+
+```{r}
+Pros_df <- Pros_df %>%
+  as_tibble() %>%
+  mutate(comments = str_replace_all(comments, "\uFFFD", "")) 
+
+Cons_df <- Cons_df %>%
+  as_tibble() %>%
+  mutate(comments = str_replace_all(comments, "\uFFFD", ""))
+```
+
+#Prep pros and cons
+```{r}
+Pros_df <- Pros_df %>%
+    mutate(comments = tolower(comments)) #convert to lowercase
+
+Cons_df <- Cons_df %>%
+    mutate(comments = tolower(comments)) #convert to lowercase
+
+#Remove line breaks
+Pros_df$comments <- gsub("[\r\n]", "", Pros_df$comments)
+
+Pros_df <- Pros_df %>%
+    select(ID, comments) %>%
+    na.omit()
+
+Cons_df$comments <- gsub("[\r\n]", "", Cons_df$comments)
+
+Cons_df <- Cons_df %>%
+    select(ID, comments) %>%
+    na.omit()
+```
+
+#Record start time
+```{r}
+start_time <- now()
+#This will be compared againt the end time to capture and estimated runtime for future reference. 
+```
+
+#Work-life Balance
+```{r}
+wlb <- c('\\b(?:im)?balance\\b', #balance or imbalance
+        '\\bovertime\\b', '\\bot\\b', #overtime or ot
+        '^.*flex.*$') #flex, flexible, flexibility
+
+wlb_pattern <- paste(wlb, collapse = "|") #Combines everything from wlb into a pattern to search for.
+
+wlb_pro_comments <- as.data.frame(Pros_df[grep(wlb_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(work_life_balance = ifelse(comments %in% wlb_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "wlb" column
+
+#Repeat for cons
+wlb_con_comments <- as.data.frame(Cons_df[grep(wlb_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(work_life_balance = ifelse(comments %in% wlb_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Work-life Balance: Work Arrangements
+```{r}
+wlb_arrange <- c('\\bremote\\b', #remote
+                 '\\bhybrid\\b', #hybrid
+                 '^.*(?:tele)?commut.*$', #commute, commuting, commuter, telecommute, etc. 
+                 '\\bwork(?:ing)?\\sfrom\\shome\\b') #work or working from home
+
+wlb_arrange_pattern <- paste(wlb_arrange, collapse = "|") #Combines everything from wlb_arrange into a pattern to search for.
+
+wlb_arrange_pro_comments <- as.data.frame(Pros_df[grep(wlb_arrange_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(work_arrangement = ifelse(comments %in% wlb_arrange_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "wlb_arrange" column
+
+#Repeat for cons
+wlb_arrange_con_comments <- as.data.frame(Cons_df[grep(wlb_arrange_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(work_arrangement = ifelse(comments %in% wlb_arrange_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Benefits
+```{r}
+benefits <- c('\\bbenefits?\\b', #benefit or benefits
+             '\\bhealth\\s?care\\b', #healthcare or health care
+             '(?=.*\\bhealth(?:\\s?care)?\\b)(?=.*\\binsur\\w*)', #insurance or insured with health or healthcare or health care
+             '\\bhealth\\s?plan') #health plan or health plans with or without space
+
+benefits_pattern <- paste(benefits, collapse = "|") #Combines everything from benefits into a pattern to search for.
+
+benefits_pro_comments <- as.data.frame(Pros_df[grep(benefits_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(benefits = ifelse(comments %in% benefits_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "benefits" column
+
+#Repeat for cons
+benefits_con_comments <- as.data.frame(Cons_df[grep(benefits_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(benefits = ifelse(comments %in% benefits_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Benefits: Vacation
+```{r}
+ben_vacation <- c('\\bvacation\\b', #vaction
+                  '\\bpto\\b', #pto
+                  '\\bpaid\\stime\\soff\\b') #paid time off
+
+ben_vacation_pattern <- paste(ben_vacation, collapse = "|") #Combines everything from ben_vacation into a pattern to search for.
+
+ben_vacation_pro_comments <- as.data.frame(Pros_df[grep(ben_vacation_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(benefits_vacation = ifelse(comments %in% ben_vacation_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "benefits" column
+
+#Repeat for cons
+ben_vacation_con_comments <- as.data.frame(Cons_df[grep(ben_vacation_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(benefits_vacation = ifelse(comments %in% ben_vacation_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Benefits: Point Solutions
+```{r}
+ben_pointsols <- c('(?=.*\\bhinge(?:health)?\\b)', #hinge or hinge health
+                   '\\bomada\\b', #omada
+                   '\\bpomelo\\b', #pomelo
+                   '\\bspring\\shealth\\b') #spring health
+
+ben_pointsols_pattern <- paste(ben_pointsols, collapse = "|") #Combines everything from ben_pointsols into a pattern to search for.
+
+ben_pointsols_pro_comments <- as.data.frame(Pros_df[grep(ben_pointsols_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(benefits_pointsols = ifelse(comments %in% ben_pointsols_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "benefits" column
+
+#Repeat for cons
+ben_pointsols_con_comments <- as.data.frame(Cons_df[grep(ben_pointsols_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(benefits_pointsols = ifelse(comments %in% ben_pointsols_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Benefits: Dental
+```{r}
+ben_dental <- c('\\bdental\\b', #dental
+                '\\bdentist\\b', #dentist
+                '\\borthodont.+') #orthodonticts or orthodontist 
+
+ben_dental_pattern <- paste(ben_dental, collapse = "|") #Combines everything from ben_dental into a pattern to search for.
+
+ben_dental_pro_comments <- as.data.frame(Pros_df[grep(ben_dental_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(benefits_dental = ifelse(comments %in% ben_dental_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "benefits" column
+
+#Repeat for cons
+ben_dental_con_comments <- as.data.frame(Cons_df[grep(ben_dental_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(benefits_dental = ifelse(comments %in% ben_dental_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Benefits: Vision
+```{r}
+ben_vison <- c('\\b(?:vision\\W+(?:\\w+\\W+){0,3}?plans?|plans?\\W+(?:\\w+\\W+){0,3}?vision)\\b', #vision only when within three words of plan
+               '\\bvsp\\b', #vsp
+               '(?=\\bglasses\\b)(?=\\bcov.+)', #glasses with covered or covers
+               '(?=\\bcontacts\\b)(?=\\bcov.+)', #contacts with covered or covers
+               '\\beye\\sexams?\\b') #eye exam(s)
+
+ben_vison_pattern <- paste(ben_vison, collapse = "|") #Combines everything from ben_vison into a pattern to search for.
+
+ben_vison_pro_comments <- as.data.frame(Pros_df[grep(ben_vison_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(benefits_vison = ifelse(comments %in% ben_vison_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "benefits" column
+
+#Repeat for cons
+ben_vison_con_comments <- as.data.frame(Cons_df[grep(ben_vison_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(benefits_vison = ifelse(comments %in% ben_vison_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Benefits: Retirement
+```{r}
+ben_retire <- c('(?=\\bretirement\\b)(?=plan)', #retirement plan
+                '\\b401k\\b', #401k
+                '\\bfidelity\\b', #Fidelity
+                '\\bpension\\b') #pension
+
+ben_retire_pattern <- paste(ben_retire, collapse = "|") #Combines everything from ben_retire into a pattern to search for.
+
+ben_retire_pro_comments <- as.data.frame(Pros_df[grep(ben_retire_pattern, Pros_df$comments, value = FALSE, perl = TRUE),]) # This takes the pattern you just created and searches over the entire column of "comments" in the Pros_df
+
+Pros_df <- Pros_df %>%
+    mutate(benefits_retirement = ifelse(comments %in% ben_retire_pro_comments$comments, "Y",
+                             "N")) #This creates a new object, TEST_Pro, from Pros_df and if any of the comments in the "comments" column match (%in%) the comments exactly, they get a "Y". If not they get a "N" in the new "benefits" column
+
+#Repeat for cons
+ben_retire_con_comments <- as.data.frame(Cons_df[grep(ben_retire_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(benefits_retirement = ifelse(comments %in% ben_retire_con_comments$comments, "Y",
+                             "N"))
+```
+
+#Company Culture
+```{r}
+culture <- c('\\bculture\\b', #culture
+             '\\batmosphere\\b', #atmosphere
+             '\\benvironment\\b') #environment
+
+culture_pattern <- paste(culture, collapse = "|")
+
+culture_pro_comments <- as.data.frame(Pros_df[grep(culture_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(culture = ifelse(comments %in% culture_pro_comments$comments, "Y", "N"))
+
+culture_con_comments <- as.data.frame(Cons_df[grep(culture_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(culture = ifelse(comments %in% culture_con_comments$comments, "Y", "N"))
+```
+
+#Company Culture: PBM
+```{r}
+culture_pbm <- c('\\bpbm\\b', #pbm
+                 '^.+\\sbased\\smanagement$', #principle based management or market based management
+                 '\\bguiding\\sprinciples\\b') #guiding principles
+ 
+culture_pbm_pattern <- paste(culture_pbm, collapse = "|")
+
+culture_pbm_pro_comments <- as.data.frame(Pros_df[grep(culture_pbm_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(culture_pbm = ifelse(comments %in% culture_pbm_pro_comments$comments, "Y", "N"))
+
+culture_pbm_con_comments <- as.data.frame(Cons_df[grep(culture_pbm_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(culture_pbm = ifelse(comments %in% culture_pbm_con_comments$comments, "Y", "N"))       
+```
+
+#Company Culture: Teams
+```{r}
+culture_teams <- c('\\bteam(?:.+)?', #anything that starts with "team" including "team" itself
+                   'collab(?:.+)?') #collaboration, collaborative, collab, etc. 
+
+culture_teams_pattern <- paste(culture_teams, collapse = "|")
+
+culture_teams_pro_comments <- as.data.frame(Pros_df[grep(culture_teams_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(culture_teams = ifelse(comments %in% culture_teams_pro_comments$comments, "Y", "N"))
+
+culture_teams_con_comments <- as.data.frame(Cons_df[grep(culture_teams_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(culture_teams = ifelse(comments %in% culture_teams_con_comments$comments, "Y", "N"))
+```
+
+#Company Cultute: Diveristy
+```{r}
+culture_diverse <- c('\\bdivers(?:e|ity)', #diverse, diversity
+                     '\\binclusion\\b', #inclusion
+                     '\\bequality\\b', #equality
+                     '\\bequity\\b', #equity
+                     '\\bbelong(?:ing)?\\b') #belong or belonging
+
+culture_diverse_pattern <- paste(culture_diverse, collapse = "|")
+
+culture_diverse_pro_comments <- as.data.frame(Pros_df[grep(culture_diverse_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(culture_diversity = ifelse(comments %in% culture_diverse_pro_comments$comments, "Y", "N"))
+
+culture_diverse_con_comments <- as.data.frame(Cons_df[grep(culture_diverse_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(culture_diversity = ifelse(comments %in% culture_diverse_con_comments$comments, "Y", "N"))
+```
+
+#Career Opportunities
+```{r}
+career <- c('\\bcareer\\b', #career
+            '\\bcareer\\sopportunit(?:y|ies)\\b', #career opportunities
+            '(?:good|bad)\\sexperiences?') #good or bad experience(s)
+
+career_pattern <- paste(career, collapse = "|")
+
+career_pro_comments <- as.data.frame(Pros_df[grep(career_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(career = ifelse(comments %in% career_pro_comments$comments, "Y", "N"))
+
+career_con_comments <- as.data.frame(Cons_df[grep(career_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(career = ifelse(comments %in% career_con_comments$comments, "Y", "N"))
+```
+
+#Career Opportunities: Promotion
+```{r}
+career_promo <- c('\\bpromotions?\\b', #promotion(s)
+                  '\\braises?\\b', #raise(s)
+                  '\\bcareer\\sadvancement\\b') #career advancement
+
+career_promo_pattern <- paste(career_promo, collapse = "|")
+
+career_promo_pro_comments <- as.data.frame(Pros_df[grep(career_promo_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(career_promotion = ifelse(comments %in% career_promo_pro_comments$comments, "Y", "N"))
+
+career_promo_con_comments <- as.data.frame(Cons_df[grep(career_promo_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(career_promotion = ifelse(comments %in% career_promo_con_comments$comments, "Y", "N"))
+```
+
+#Career Opportunities: Mentorship
+```{r}
+career_mentor <- c('^mentor(?:.+)?', #mentor, mentoring, mentorship, etc.
+                   '\\bmentees?\\b') #mentee or mentees
+
+career_mentor_pattern <- paste(career_mentor, collapse = "|")
+
+career_mentor_pro_comments <- as.data.frame(Pros_df[grep(career_mentor_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(career_mentor = ifelse(comments %in% career_mentor_pro_comments$comments, "Y", "N"))
+
+career_mentor_con_comments <- as.data.frame(Cons_df[grep(career_mentor_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(career_mentor = ifelse(comments %in% career_mentor_con_comments$comments, "Y", "N"))
+```
+
+#Career Opportunities: Development
+```{r}
+career_develop <- c('\\b(?:career|professional)\\sdevelopment\\b', #career/professional development
+                '\\b(?:career|professional)\\sgrowth\\b', #career/professional growth
+                '\\btrainings?\\b') #training or trainings
+
+career_develop_pattern <- paste(career_develop, collapse = "|")
+
+career_develop_pro_comments <- as.data.frame(Pros_df[grep(career_develop_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(career_development = ifelse(comments %in% career_develop_pro_comments$comments, "Y", "N"))
+
+career_develop_con_comments <- as.data.frame(Cons_df[grep(career_develop_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(career_development = ifelse(comments %in% career_develop_con_comments$comments, "Y", "N"))
+```
+
+#Personal Development
+```{r}
+personal_develop <- c('\\bpersonal\\s(?:devleopment|growth)\\b') #personal growth or development
+
+personal_develop_pattern <- paste(personal_develop, collapse = "|")
+
+personal_develop_pro_comments <- as.data.frame(Pros_df[grep(personal_develop_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(personal_development = ifelse(comments %in% personal_develop_pro_comments$comments, "Y", "N"))
+
+personal_develop_con_comments <- as.data.frame(Cons_df[grep(personal_develop_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(personal_development = ifelse(comments %in% personal_develop_con_comments$comments, "Y", "N"))
+```
+
+#Compensation
+```{r}
+compensation <- c('\\bsalar(?:y|ies)\\b', #salary or salaries
+              '\\bcompen.*', #compensate, compensation, ect.
+              '\\bpay\\b', #pay
+              '\\bpay\\srates?\\b', #pay rate or rates
+              '\\bmoney\\b') #money
+
+compensation_pattern <- paste(compensation, collapse = "|")
+
+compensation_pro_comments <- as.data.frame(Pros_df[grep(compensation_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(compensation = ifelse(comments %in% compensation_pro_comments$comments, "Y", "N"))
+
+compensation_con_comments <- as.data.frame(Cons_df[grep(compensation_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(compensation = ifelse(comments %in% compensation_con_comments$comments, "Y", "N"))
+```
+
+#Leadership
+```{r}
+leadership <- c('^leader.*$', #leader, leaders, leadership
+                '\\bmanage(?:ers?|ment)\\b', #manager(s) or management
+                '\\bsupervisors?\\b', #supervisor(s)
+                '\\bboss(?:es)?\\b') #boss(es)
+
+leadership_pattern <- paste(leadership, collapse = "|")
+
+leadership_pro_comments <- as.data.frame(Pros_df[grep(leadership_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(leadership = ifelse(comments %in% leadership_pro_comments$comments, "Y", "N"))
+
+leadership_con_comments <- as.data.frame(Cons_df[grep(leadership_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(leadership = ifelse(comments %in% leadership_con_comments$comments, "Y", "N"))
+```
+
+#Leadership: Communication
+```{r}
+leadership_comm <- c('\\b(?:leader.*|manage(?:ers?|ment)|supervisors?|boss(?:es)?)\\b.*\\b(?:communic.*|discuss.*|annouce.*)\\b', #word for leadership followed by commnication terms
+                     '\\b(?:communic.*|discuss.*|annouce.*)\\b.*\\b(?:leader.*|manage(?:ers?|ment)|supervisors?|boss(?:es)?)\\b') #communication term followed by leadership
+
+leadership_comm_pattern <- paste(leadership_comm, collapse = "|")
+
+leadership_comm_pro_comments <- as.data.frame(Pros_df[grep(leadership_comm_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(leadership_communication = ifelse(comments %in% leadership_comm_pro_comments$comments, "Y", "N"))
+
+leadership_comm_con_comments <- as.data.frame(Cons_df[grep(leadership_comm_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(leadership_communication = ifelse(comments %in% leadership_comm_con_comments$comments, "Y", "N"))
+```
+
+#Leadership: Effectiveness
+```{r}
+leadership_effect <- c('\\b(?:leader.*|manage(?:ers?|ment)|supervisors?|boss(?:es)?)\\b.*\\beffective.*\\b', #word for leadership followed by term of effectiveness
+                       '\\beffective.*\\b.*\\b(?:leader.*|manage(?:ers?|ment)|supervisors?|boss(?:es)?)\\b') #effectiveness term followed by leadership
+
+leadership_effect_pattern <- paste(leadership_effect, collapse = "|")
+
+leadership_effect_pro_comments <- as.data.frame(Pros_df[grep(leadership_effect_pattern, Pros_df$comments, value = FALSE, perl = TRUE),])
+
+Pros_df <- Pros_df %>%
+    mutate(leadership_effectiveness = ifelse(comments %in% leadership_effect_pro_comments$comments, "Y", "N"))
+
+leadership_effect_con_comments <- as.data.frame(Cons_df[grep(leadership_effect_pattern, Cons_df$comments, value = FALSE, perl = TRUE),])
+
+Cons_df <- Cons_df %>%
+    mutate(leadership_effectiveness = ifelse(comments %in% leadership_effect_con_comments$comments, "Y", "N"))
+```
+
+#Record run time
+```{r}
+end_time <- now()
+
+print(difftime(end_time, start_time))
+```
+Runtime of 14.31314 secs
+
+
+#Write to excel
+```{r}
+INTRO_pro <- c("Honeywell - Pros",
+
+         "Data Source: Glassdoor",
+
+         "Data As Of: Q3 2024",
+
+         "Prepared on: 7/19/2024",
+
+         "Prepared by: Taylor Allmen")
+
+INTRO_con <- c("Honeywell - Cons",
+
+         "Data Source: Glassdoor",
+
+         "Data As Of: Q3 2024",
+
+         "Prepared on: 7/19/2024",
+
+         "Prepared by: Taylor Allmen")
+
+wb <- openxlsx::createWorkbook() #Create a work book
+
+
+#Comment Report
+
+addWorksheet(wb, "Pros Comment Report") #create Pros worksheet in Excel
+addWorksheet(wb, "Cons Comment Report") #create Cons worksheet in Excel
+
+writeData(wb, "Pros Comment Report", INTRO_pro) #Add your INTRO
+writeData(wb, "Cons Comment Report", INTRO_con) #Add your INTRO
+
+#Create style
+
+style1 <- createStyle(fontColour = "#006359", textDecoration = "Bold") #Choose your custom font color (https://www.rgbtohex.net/) and make it bold. Call it style1
+
+ 
+addStyle(wb, style = style1, rows= 1:5, cols = 1, sheet = "Pros Comment Report") #add this style to your worksheet. Tell it which rows and columns
+addStyle(wb, style = style1, rows= 1:5, cols = 1, sheet = "Cons Comment Report")
+
+writeData(wb, "Pros Comment Report", Pros_df, startRow = 8) #put your Pros_df into the pros sheet under your writing (row 8)
+
+writeData(wb, "Cons Comment Report", Cons_df, startRow = 8) #put your Cons_df into the cons sheet under your writing (row 8)
+
+hs1 <- createStyle(textDecoration = "Bold") #create a new style for heading
+
+addStyle(wb, style = hs1, rows = 8, cols = 1:ncol(Pros_df), sheet = "Pros Comment Report") #add style for category headings (row 8)
+addStyle(wb, style = hs1, rows = 8, cols = 1:ncol(Cons_df), sheet = "Cons Comment Report")
+
+#Freeze Panes
+freezePane(wb, "Pros Comment Report", firstActiveRow = 9) #Freeze those panes. You know you want to. Tell it where to start.
+freezePane(wb, "Cons Comment Report", firstActiveRow = 9)
+
+#Add filter
+
+addFilter(wb, "Pros Comment Report", row = 8, cols = 1:ncol(Pros_df)) #Add filter
+addFilter(wb, "Cons Comment Report", row = 8, cols = 1:ncol(Cons_df))
+
+
+saveWorkbook(wb, paste0("C:/Users/Taylor/OneDrive/PSYC 6841 Advanced Analytics/Glassdoor_Comment_Report_",  format(floor_date(Sys.Date()-months(1), "month"), "%B_%Y") , ".xlsx"), overwrite = TRUE) #report for last month
+```
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
